@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>guess the demo game !</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0;" />
+  <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/prototype/1.7.2.0/prototype.js"></script>
+
+<style type="text/css">
+* {
+  margin: 0px;
+  padding: 0px;
+}
+
+body {
+  background: #3A6EA5 url("http://content.pouet.net/gfx/trumpet.png");
+  font-size : 9pt;
+  font-family: Tahoma, Verdana, Arial, Helvetica, sans-serif;
+  margin: 0px;
+  padding: 0px;
+  color: #ffffff;
+  
+  text-transform: lowercase;
+}
+a {
+  color : #9FCFFF;
+  text-decoration : none;
+}
+a:hover {
+  text-decoration : underline;
+}
+input, select, option, button {
+  font-size : 9pt;
+  font-family: Tahoma, Verdana, Arial, Helvetica, sans-serif;
+  font-weight: normal;
+  padding: 2px 4px;
+}
+
+#game, #menu, #gameOver
+{
+  background: #446688;
+  border: 2px solid black;
+  margin: 0px auto 20px;
+  padding: 1px;
+  display: table;
+  text-align: left;
+  color: white;
+  
+  margin-top: 30vh;
+}
+#screenshot {
+  width: 400px;
+  height: 300px;
+  text-align: center;
+  padding: 20px;
+}
+#result {
+  display: inline;
+  border: 2px solid black;
+  color: white;
+  padding: 0px 5px;
+}
+#result.correct {
+  background: #228830;
+}
+#result.incorrect {
+  background: #884446;
+}
+#result.skip {
+  background: #888846;
+}
+#score span {
+  font-weight: bold;
+}
+#timer span {
+  font-weight: bold;
+}
+#answer {
+  width: 300px;
+  margin: 10px;
+  padding: 3px;
+}
+#score, #timer {
+  text-align: center;
+  padding: 10px;
+}
+#menu, #gameOver {
+  text-align: center;
+  padding: 20px;
+}
+#finalScore {
+  text-align: center;
+  font-size: 32px;
+}
+#start, #restart {
+  font-size: 18px;
+  margin: 30px;
+}
+#demos {
+  text-align: left;
+  max-height: 400px;
+  overflow-y: auto;
+}
+#demos li img {
+  vertical-align: middle;
+  max-width: 150px;
+  margin: 5px;
+}
+</style>
+<script type="text/javascript">
+<!--
+var score = 0;
+var timer = 60;
+var interval = null;
+var demos = [];
+var guessedCorrectly = [];
+var encountered = [];
+var currentDemo = "";
+
+var nextDemoDelay = 2000;
+var maxTimer = 60;
+var correctScore = 100;
+var correctTimer = 10;
+var skipPenalty = 25;
+var cacheSize = 1;
+var safeCacheSize = 1;
+
+function ensureCache()
+{
+  if (demos.length < cacheSize)
+  {
+    new Ajax.Request("next.php",{
+      "onSuccess":function(transport)
+        {
+          if (guessedCorrectly.indexOf(transport.responseJSON.prod.id) == -1)
+          {
+            demos.push(transport.responseJSON.prod);
+          }
+        }
+    });
+  }
+  if (demos.length > safeCacheSize)
+  {
+    $("start").disabled = null;
+  }
+}
+function gameOver()
+{
+  $("game").hide();
+  $("gameOver").show();
+  $("menu").hide();
+  
+  $("demos").down("ul").update("");
+  encountered.each(function(e){
+    var li = new Element("li");
+    li.insert(new Element("img",{src:e.screenshot}));
+    li.insert(new Element("a",{href:"http://www.pouet.net/prod.php?which="+e.id}).update(e.name));
+    $("demos").down("ul").insert(li);
+  });
+  clearInterval(interval);
+}
+function setScore(s)
+{
+  s = Math.max(0,s);
+  score = s;
+  $("score").down("span").update(score);
+  $("finalScore").down("span").update(score);
+}
+function testAnswer()
+{
+  var validNames = [];
+  var name = currentDemo.name.toLowerCase();
+  validNames.push(name);
+  validNames = validNames.concat(name.split(/(?:\s+-\s+|:)/));
+  validNames = validNames.map(function(s){ return s.replace(new RegExp(/[^a-z0-9]/g), ""); });
+  console.log(validNames);
+  var guess = $("answer").value.toLowerCase().replace(new RegExp(/[^a-z0-9]/g), "");
+  $("result").show();
+  $("result").className = "";
+  
+  if (validNames.indexOf(guess) != -1)
+  {
+    setScore(score + correctScore);
+    timer = Math.min(timer + correctTimer, maxTimer);
+    $("result").addClassName("correct");
+    $("result").update("Correct");
+    guessedCorrectly.push(currentDemo.id);
+    setTimeout(nextDemo,nextDemoDelay);
+  }
+  else
+  {
+    $("result").addClassName("incorrect");
+    $("result").update("Wrong!");
+    setTimeout(function(){ $("result").hide(); },2000);
+  }
+}
+function skip()
+{
+  setScore(score - skipPenalty);
+  $("skip").disabled = "disabled";
+
+  $("result").show();
+  $("result").addClassName("skip");
+  $("result").update("skipping");
+  
+  setTimeout(function(){ nextDemo(); },nextDemoDelay);  
+}
+function nextDemo()
+{
+  if (demos.length <= 0)
+  {
+    setTimeout(nextDemo,500);
+    return;
+  }
+  
+  $("skip").disabled = null;  
+  $("result").hide();
+  $("answer").value = "";
+  $("answer").focus();
+  $("result").update("");
+  
+  var index = Math.floor(Math.random()*demos.length);
+  var demo = demos[index]
+  demos.splice(index, 1);
+  
+  encountered.push(demo);
+  
+  currentDemo = demo;
+  $("screenshot").down("img").src = currentDemo.screenshot;
+}
+function tick()
+{
+  if (timer == 0)
+  {
+    gameOver();
+  }
+  timer--;
+  $("timer").down("span").update(timer);
+}
+function startGame()
+{
+  $("game").show();
+  $("gameOver").hide();
+  $("menu").hide();
+ 
+  guessedCorrectly = [];
+  encountered = [];
+  setScore(0);
+  timer = 60;
+  interval = setInterval(tick,1000);
+  
+  nextDemo();
+}
+
+document.observe("dom:loaded",function(){
+  setInterval(ensureCache,300);
+  $("game").hide();
+  $("gameOver").hide();
+  $("start").disabled = "disabled";
+  $("start").observe("click",function(){ startGame(); });
+  $("skip").observe("click",function(){ skip(); });  
+  $("answer").observe("keyup",function(e){ if(e.keyCode==13) testAnswer(); });
+  $("restart").observe("click",function(){ startGame(); });
+});
+//-->
+</script>  
+
+</head>
+<body>
+
+<div id="container">
+  <div id="game">
+    <div id="screenshot"><img src="#"/></div>
+    <input type="text" id="answer" placeholder="Enter your solution here!"/>
+    <button id="skip">Skip !</button>
+    <div id="result"></div>
+    <div id="score">Score: <span></span></div>
+    <div id="timer"><span></span> seconds left</div>
+  </div>
+  <div id="menu">
+    <h1>Guess the demo !</h1>
+    <button id="start">start !</start>
+  </div>
+  <div id="gameOver">
+    <h2 id="finalScore">Your score was <span></span> points !</h2>
+    <div id="demos">
+      Here are all the demos you encountered:
+      <ul></ul>
+    </div>
+    <button id="restart">Restart game</start>
+  </div>
+</div>
+
+</body>
+</html>
