@@ -1,6 +1,5 @@
 <?
-// include your pouet2 bootstrap here
-include_once("../../www.pouet.net/bootstrap.inc.php");
+include_once("config.inc.php");
 
 $sql = new SQLSelect();
 $sql->AddField("prods.id");
